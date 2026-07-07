@@ -1,0 +1,23 @@
+<Solution>
+  <Folder Name="/ProductCatalog/">
+    <Project Path="src/ProductCatalog/ProductCatalog.API/ProductCatalog.API.csproj" />
+    <Project Path="src/ProductCatalog/ProductCatalog.Application/ProductCatalog.Application.csproj" />
+    <Project Path="src/ProductCatalog/ProductCatalog.Domain/ProductCatalog.Domain.csproj" />
+    <Project Path="src/ProductCatalog/ProductCatalog.Infrastructure/ProductCatalog.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Shared/">
+    <Project Path="src/Shared/Shared.Kernel/Shared.Kernel.csproj" />
+  </Folder>
+  <Folder Name="/UserManagement/">
+    <Project Path="src/UserManagement/UserManagement.API/UserManagement.API.csproj" />
+    <Project Path="src/UserManagement/UserManagement.Application/UserManagement.Application.csproj" />
+    <Project Path="src/UserManagement/UserManagement.Domain/UserManagement.Domain.csproj" />
+    <Project Path="src/UserManagement/UserManagement.Infrastructure/UserManagement.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="tests/UserManagement/UserManagement.Application.Tests/UserManagement.Application.Tests.csproj" />
+    <Project Path="tests/UserManagement/UserManagement.API.Tests/UserManagement.API.Tests.csproj" />
+    <Project Path="tests/ProductCatalog/ProductCatalog.Application.Tests/ProductCatalog.Application.Tests.csproj" />
+    <Project Path="tests/ProductCatalog/ProductCatalog.API.Tests/ProductCatalog.API.Tests.csproj" />
+  </Folder>
+</Solution>
