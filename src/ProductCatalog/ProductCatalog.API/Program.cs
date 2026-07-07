@@ -89,6 +89,15 @@ app.MapCartEndpoints();
 app.MapInventoryEndpoints();
 app.MapCategoryEndpoints();
 
+// Off by default (local dotnet run and WebApplicationFactory tests both rely on their existing
+// setup — manual `dotnet ef database update` locally, EnsureCreated() in tests). Only the
+// Kubernetes ConfigMaps set this to true, since Migrate() is idempotent and safe on every pod start.
+if (builder.Configuration.GetValue<bool>("RunMigrationsOnStartup"))
+{
+    using IServiceScope scope = app.Services.CreateScope();
+    scope.ServiceProvider.GetRequiredService<ProductCatalogDbContext>().Database.Migrate();
+}
+
 app.Run();
 
 // Exposed so WebApplicationFactory<Program> can bootstrap this host in integration tests.

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: productcatalog-api-config
+  namespace: microservices
+data:
+  RunMigrationsOnStartup: "true"
+  RabbitMq__HostName: "rabbitmq"
+  RabbitMq__Port: "5672"
+  RabbitMq__ExchangeName: "microservices.events"

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: productcatalog-api
+  namespace: microservices
+spec:
+  type: LoadBalancer
+  selector:
+    app: productcatalog-api
+  ports:
+    - port: 8082
+      targetPort: 8080

@@ -22,6 +22,8 @@ dotnet ef database update --project src/UserManagement/UserManagement.Infrastruc
 
 Compiled language — `dotnet build`/`dotnet run` both compile first. No lint script or `.editorconfig` is configured in this repo; follow the Code Style section below by hand. There is no seed script for either service. UserManagement has `POST /auth/register` to create data; ProductCatalog has `POST /categories` and `POST /products` for the same purpose (a category must exist before a product can be created against it).
 
+To run the whole stack (both APIs, SQL Server, RabbitMQ) on a local Kubernetes cluster instead of plain `dotnet run`, see `k8s/README.md` — additive, doesn't replace the commands above.
+
 ## Architecture
 
 Request flow: **Minimal API endpoint → MediatR command/query → handler → `DbContext`**
