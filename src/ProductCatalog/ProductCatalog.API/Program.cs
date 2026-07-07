@@ -1,8 +1,11 @@
+using System.Text;
 using System.Text.Json;
 using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using ProductCatalog.API.Endpoints;
 using ProductCatalog.Application.Carts.Commands.AddCartItem;
 using ProductCatalog.Infrastructure.Messaging;
@@ -31,12 +34,36 @@ builder.Services.AddValidatorsFromAssembly(typeof(AddCartItemCommand).Assembly);
 builder.Services.Configure<RabbitMqOptions>(builder.Configuration.GetSection("RabbitMq"));
 builder.Services.AddHostedService<UserRegisteredConsumer>();
 
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // Without this, the handler's default inbound claim mapping silently renames "sub" (and other
+        // short JWT claim names) to legacy long-form URIs, so FindFirstValue(JwtRegisteredClaimNames.Sub)
+        // in the endpoints below returns null for every authenticated request.
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.UseExceptionHandler(errApp =>
     errApp.Run(async context =>

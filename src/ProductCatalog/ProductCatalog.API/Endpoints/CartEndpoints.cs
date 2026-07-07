@@ -1,7 +1,8 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using MediatR;
 using ProductCatalog.Application.Carts.Commands.AddCartItem;
 using ProductCatalog.Application.DTOs;
-using Shared.Kernel.Exceptions;
 
 namespace ProductCatalog.API.Endpoints;
 
@@ -11,14 +12,13 @@ public static class CartEndpoints
     {
         var group = app.MapGroup("/cart");
 
-        group.MapPost("/{userId}/items", async (string userId, AddCartItemRequest body, IMediator mediator, CancellationToken ct) =>
+        group.MapPost("/items", async (AddCartItemRequest body, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {
-            if (!Guid.TryParse(userId, out Guid id))
-                throw new BadRequestException($"'{userId}' is not a valid user id.");
-
-            CartDto cart = await mediator.Send(new AddCartItemCommand(id, body.ProductId, body.Quantity), ct);
+            Guid userId = Guid.Parse(user.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+            CartDto cart = await mediator.Send(new AddCartItemCommand(userId, body.ProductId, body.Quantity), ct);
             return Results.Ok(cart);
         })
+        .RequireAuthorization()
         .WithName("AddCartItem");
 
         return app;

@@ -5,6 +5,8 @@ metadata:
   namespace: microservices
 data:
   RunMigrationsOnStartup: "true"
+  Jwt__Issuer: "UserManagement.API"
+  Jwt__Audience: "UserManagement.Clients"
   RabbitMq__HostName: "rabbitmq"
   RabbitMq__Port: "5672"
   RabbitMq__ExchangeName: "microservices.events"

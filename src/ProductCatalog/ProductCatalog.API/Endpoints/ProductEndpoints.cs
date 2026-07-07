@@ -75,6 +75,7 @@ public static class ProductEndpoints
 
             return Results.CreatedAtRoute("GetProductById", new { productId = product.Id }, product);
         })
+        .RequireAuthorization()
         .WithName("CreateProduct");
 
         return app;

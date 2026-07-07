@@ -1,8 +1,11 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using ProductCatalog.Domain.Entities;
 using Xunit;
 
@@ -18,6 +21,10 @@ public class ProductEndpointsTests : IClassFixture<ProductCatalogWebApplicationF
         _factory = factory;
         _client = factory.CreateClient();
     }
+
+    private void Authenticate() =>
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", TestJwt.MintToken(_factory.Services.GetRequiredService<IConfiguration>(), Guid.NewGuid()));
 
     [Fact]
     public async Task GetProductById_WhenProductDoesNotExist_ReturnsNotFoundWithStandardErrorShape()
@@ -56,6 +63,7 @@ public class ProductEndpointsTests : IClassFixture<ProductCatalogWebApplicationF
     [Fact]
     public async Task CreateProduct_WhenCategoryDoesNotExist_ReturnsNotFoundWithStandardErrorShape()
     {
+        Authenticate();
         HttpResponseMessage response = await _client.PostAsJsonAsync("/products", new
         {
             name = "Widget",
@@ -75,6 +83,7 @@ public class ProductEndpointsTests : IClassFixture<ProductCatalogWebApplicationF
     [Fact]
     public async Task CreateProduct_WhenBodyIsMalformedJson_ReturnsBadRequestWithStandardErrorShape()
     {
+        Authenticate();
         var content = new StringContent("{ this is not valid json", Encoding.UTF8, "application/json");
 
         HttpResponseMessage response = await _client.PostAsync("/products", content);
@@ -85,5 +94,21 @@ public class ProductEndpointsTests : IClassFixture<ProductCatalogWebApplicationF
         JsonElement error = body.RootElement.GetProperty("error");
         error.GetProperty("code").GetString().Should().NotBeNullOrEmpty();
         error.GetProperty("message").GetString().Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task CreateProduct_WhenNoBearerToken_ReturnsUnauthorized()
+    {
+        HttpResponseMessage response = await _client.PostAsJsonAsync("/products", new
+        {
+            name = "Widget",
+            description = "desc",
+            price = 9.99m,
+            currency = "USD",
+            categoryId = Guid.NewGuid(),
+            inventoryCount = 10
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }

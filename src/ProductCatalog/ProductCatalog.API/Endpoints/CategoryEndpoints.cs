@@ -15,6 +15,7 @@ public static class CategoryEndpoints
             CategoryDto category = await mediator.Send(new CreateCategoryCommand(body.Name, body.ParentId), ct);
             return Results.Created($"/categories/{category.Id}", category);
         })
+        .RequireAuthorization()
         .WithName("CreateCategory");
 
         return app;

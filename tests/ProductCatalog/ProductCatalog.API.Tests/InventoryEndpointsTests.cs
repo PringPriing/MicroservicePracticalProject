@@ -1,8 +1,11 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using ProductCatalog.Domain.Entities;
 using Xunit;
 
@@ -19,9 +22,14 @@ public class InventoryEndpointsTests : IClassFixture<ProductCatalogWebApplicatio
         _client = factory.CreateClient();
     }
 
+    private void Authenticate() =>
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", TestJwt.MintToken(_factory.Services.GetRequiredService<IConfiguration>(), Guid.NewGuid()));
+
     [Fact]
     public async Task UpdateInventory_WhenBodyIsMalformedJson_ReturnsBadRequestWithStandardErrorShape()
     {
+        Authenticate();
         var content = new StringContent("not json at all", Encoding.UTF8, "application/json");
 
         HttpResponseMessage response = await _client.PutAsync($"/inventory/{Guid.NewGuid()}", content);
@@ -37,6 +45,7 @@ public class InventoryEndpointsTests : IClassFixture<ProductCatalogWebApplicatio
     [Fact]
     public async Task UpdateInventory_WhenNeitherDeltaNorSetQuantityProvided_ReturnsBadRequestValidationError()
     {
+        Authenticate();
         HttpResponseMessage response = await _client.PutAsJsonAsync(
             $"/inventory/{Guid.NewGuid()}",
             new { });
@@ -50,6 +59,7 @@ public class InventoryEndpointsTests : IClassFixture<ProductCatalogWebApplicatio
     [Fact]
     public async Task UpdateInventory_WithSetQuantity_UpdatesInventoryAndReturnsOk()
     {
+        Authenticate();
         Category category = Category.Create("Widgets");
         var product = Product.Create("Widget", "desc", 9.99m, "USD", category.Id, [], new(), inventoryCount: 5);
         await using (var db = _factory.CreateDbContext())
@@ -67,5 +77,15 @@ public class InventoryEndpointsTests : IClassFixture<ProductCatalogWebApplicatio
 
         using JsonDocument body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         body.RootElement.GetProperty("inventoryCount").GetInt32().Should().Be(42);
+    }
+
+    [Fact]
+    public async Task UpdateInventory_WhenNoBearerToken_ReturnsUnauthorized()
+    {
+        HttpResponseMessage response = await _client.PutAsJsonAsync(
+            $"/inventory/{Guid.NewGuid()}",
+            new { setQuantity = 1 });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }

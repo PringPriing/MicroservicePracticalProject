@@ -19,9 +19,10 @@ sequenceDiagram
     ProductCatalog.API-->>RabbitMQ: ack
 
     Note over Client,ProductCatalog.API: Later, unrelated HTTP calls:
-    Client->>ProductCatalog.API: GET /products (public, no identity check)
-    Client->>ProductCatalog.API: POST /cart/{userId}/items
-    ProductCatalog.API-->>Client: 200 if a Cart row exists for userId,<br/>404 NOT_FOUND otherwise
+    Client->>ProductCatalog.API: GET /products (public, no token needed)
+    Client->>ProductCatalog.API: POST /cart/items<br/>Authorization: Bearer &lt;JWT from login/register&gt;
+    ProductCatalog.API->>ProductCatalog.API: validates JWT signature,<br/>userId = token's sub claim
+    ProductCatalog.API-->>Client: 401 if no/invalid token;<br/>200 if a Cart row exists for that userId,<br/>404 NOT_FOUND otherwise
 ```
 
 ## Exchange / queue / routing-key convention
@@ -38,9 +39,9 @@ sequenceDiagram
 - `AddCartItemCommandHandler` used to lazily create a cart for *any* `userId`, registered or not.
 - Now it 404s (`NotFoundException`) if no `Cart` row exists — and a `Cart` row only exists once `CreateCartCommand` has run for that user, which only happens after `UserRegisteredEvent` was consumed.
 
-**This is a data-integrity guard, not authentication.** It stops orphaned cart data for ids that were never registered, but proves nothing about who is actually making the request — a leaked or guessed `userId` GUID still works, since there's no signature or token check anywhere in ProductCatalog (it has no authentication at all, by design — see `CLAUDE.md`). Real authorization would mean ProductCatalog validating a JWT bearer token issued by UserManagement (stateless, no network call needed, since a JWT is self-verifying against a shared signing key). That's a separate, orthogonal piece of future work, not part of this change.
+**This is now a data-integrity guard layered under real authentication, not a substitute for it.** ProductCatalog validates the same JWT bearer tokens UserManagement issues (shared `Jwt:Key`/`Issuer`/`Audience`, stateless — no network call back to UserManagement), so `userId` on `POST /cart/items` is cryptographically proven, not just a route parameter someone typed in. The cart-existence check's remaining job is narrower than it used to be: it's not standing in for identity verification anymore, it's catching the *eventual-consistency window* between a user registering and `UserRegisteredEvent` actually being consumed — a genuinely authenticated, freshly-registered user can still hit a false 404 if they call the cart endpoint before that event has landed.
 
-It's also only *eventually* consistent: if a client calls the cart endpoint fast enough after registering, before the event has been consumed, a genuinely new user can get a false 404.
+`POST /products`, `POST /categories`, and `PUT /inventory/{productId}` also require `.RequireAuthorization()` now, but don't derive anything from the token — any authenticated caller can hit them, since there's no role/admin concept anywhere in this system yet. `GET /products` stays public.
 
 ## Known simplifications (this is a teaching PoC, not production-hardened)
 

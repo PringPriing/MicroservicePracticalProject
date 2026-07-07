@@ -17,6 +17,7 @@ public static class InventoryEndpoints
             InventoryDto result = await mediator.Send(new UpdateInventoryCommand(id, body.QuantityDelta, body.SetQuantity), ct);
             return Results.Ok(result);
         })
+        .RequireAuthorization()
         .WithName("UpdateInventory");
 
         return app;
