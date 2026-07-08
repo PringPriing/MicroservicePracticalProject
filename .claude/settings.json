@@ -35,7 +35,6 @@
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
       "Read(~/.gnupg/**)",
-      "Bash(curl:*)",
       "Bash(wget:*)",
       "WebFetch",
       "Bash(sqlcmd:*)"
