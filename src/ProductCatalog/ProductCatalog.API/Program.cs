@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ProductCatalog.API.Endpoints;
 using ProductCatalog.Application.Carts.Commands.AddCartItem;
+using ProductCatalog.Application.Services;
+using ProductCatalog.Infrastructure.Clients;
 using ProductCatalog.Infrastructure.Messaging;
 using ProductCatalog.Infrastructure.Persistence;
 using Shared.Kernel;
@@ -33,6 +35,12 @@ builder.Services.AddValidatorsFromAssembly(typeof(AddCartItemCommand).Assembly);
 
 builder.Services.Configure<RabbitMqOptions>(builder.Configuration.GetSection("RabbitMq"));
 builder.Services.AddHostedService<UserRegisteredConsumer>();
+
+builder.Services.AddHttpClient<IUserManagementClient, UserManagementHttpClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Services:UserManagement:BaseUrl"]!);
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

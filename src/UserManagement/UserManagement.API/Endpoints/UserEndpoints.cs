@@ -2,10 +2,12 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using MediatR;
 using UserManagement.Application.DTOs;
+using UserManagement.Application.Exceptions;
 using UserManagement.Application.Users.Commands.ChangePassword;
 using UserManagement.Application.Users.Commands.LoginUser;
 using UserManagement.Application.Users.Commands.RegisterUser;
 using UserManagement.Application.Users.Commands.UpdateUserProfile;
+using UserManagement.Application.Users.Queries.GetUserById;
 using UserManagement.Application.Users.Queries.ValidateToken;
 
 namespace UserManagement.API.Endpoints;
@@ -29,6 +31,15 @@ public static class UserEndpoints
             return Results.Ok(result);
         })
         .WithName("LoginUser");
+
+        group.MapGet("/{id:guid}", async (Guid id, IMediator mediator, CancellationToken ct) =>
+        {
+            UserDto user = await mediator.Send(new GetUserByIdQuery(id), ct)
+                ?? throw new NotFoundException($"User {id} was not found.");
+            return Results.Ok(user);
+        })
+        .RequireAuthorization()
+        .WithName("GetUserById");
 
         group.MapPut("/profile", async (UpdateProfileRequest body, ClaimsPrincipal user, IMediator mediator, CancellationToken ct) =>
         {

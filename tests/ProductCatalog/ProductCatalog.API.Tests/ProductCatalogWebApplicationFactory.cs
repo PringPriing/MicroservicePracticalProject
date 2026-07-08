@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using ProductCatalog.Application.DTOs;
+using ProductCatalog.Application.Services;
 using ProductCatalog.Infrastructure.Persistence;
 
 namespace ProductCatalog.API.Tests;
@@ -42,6 +44,12 @@ public sealed class ProductCatalogWebApplicationFactory : WebApplicationFactory<
             // open a real AMQP connection on host startup.
             services.RemoveAll<IHostedService>();
 
+            // No real UserManagement.API instance is reachable in this test environment either — swap
+            // the HTTP-backed client for a fake that always reports "no profile found," mirroring
+            // UserManagementHttpClient's own graceful-degradation behavior on failure.
+            services.RemoveAll<IUserManagementClient>();
+            services.AddSingleton<IUserManagementClient, FakeUserManagementClient>();
+
             using IServiceScope scope = services.BuildServiceProvider().CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ProductCatalogDbContext>();
             db.Database.EnsureCreated();
@@ -56,5 +64,11 @@ public sealed class ProductCatalogWebApplicationFactory : WebApplicationFactory<
         base.Dispose(disposing);
         if (disposing)
             _keepAliveConnection.Dispose();
+    }
+
+    private sealed class FakeUserManagementClient : IUserManagementClient
+    {
+        public Task<UserProfileDto?> GetUserByIdAsync(Guid userId, string bearerToken, CancellationToken ct) =>
+            Task.FromResult<UserProfileDto?>(null);
     }
 }

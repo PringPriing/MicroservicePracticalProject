@@ -2,14 +2,15 @@ using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ProductCatalog.Application.DTOs;
+using ProductCatalog.Application.Services;
 using ProductCatalog.Domain.Entities;
 using Shared.Kernel.Exceptions;
 
 namespace ProductCatalog.Application.Carts.Commands.AddCartItem;
 
-public record AddCartItemCommand(Guid UserId, Guid ProductId, int Quantity) : IRequest<CartDto>;
+public record AddCartItemCommand(Guid UserId, Guid ProductId, int Quantity, string? BearerToken) : IRequest<CartDto>;
 
-public sealed class AddCartItemCommandHandler(DbContext db)
+public sealed class AddCartItemCommandHandler(DbContext db, IUserManagementClient userManagementClient)
     : IRequestHandler<AddCartItemCommand, CartDto>
 {
     public async Task<CartDto> Handle(AddCartItemCommand request, CancellationToken ct)
@@ -34,10 +35,15 @@ public sealed class AddCartItemCommandHandler(DbContext db)
         cart.AddOrUpdateItem(request.ProductId, request.Quantity);
         await db.SaveChangesAsync(ct);
 
+        UserProfileDto? owner = request.BearerToken is not null
+            ? await userManagementClient.GetUserByIdAsync(request.UserId, request.BearerToken, ct)
+            : null;
+
         return new CartDto(
             cart.UserId,
             cart.Items.Select(i => new CartItemDto(i.ProductId, i.Quantity)).ToList(),
-            cart.UpdatedAt);
+            cart.UpdatedAt,
+            owner);
     }
 }
 

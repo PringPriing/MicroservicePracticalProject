@@ -10,3 +10,4 @@ data:
   RabbitMq__HostName: "rabbitmq"
   RabbitMq__Port: "5672"
   RabbitMq__ExchangeName: "microservices.events"
+  Services__UserManagement__BaseUrl: "http://usermanagement-api:8081"
