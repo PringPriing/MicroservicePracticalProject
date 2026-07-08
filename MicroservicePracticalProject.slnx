@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/ApiGateway/">
+    <Project Path="src/ApiGateway/ApiGateway.csproj" />
+  </Folder>
   <Folder Name="/ProductCatalog/">
     <Project Path="src/ProductCatalog/ProductCatalog.API/ProductCatalog.API.csproj" />
     <Project Path="src/ProductCatalog/ProductCatalog.Application/ProductCatalog.Application.csproj" />
