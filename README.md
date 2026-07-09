@@ -1,17 +1,15 @@
 # Microservice Practical Project
 
-A .NET 10 microservices system built as a course practical project: two domain-focused services
-(user authentication and a product catalog), an Ocelot API Gateway in front of them, synchronous
-and asynchronous inter-service communication, EF Core persistence per service, and a full
-Kubernetes deployment.
+A .NET 10 microservices system: two domain-focused services (user authentication and a product
+catalog), an Ocelot API Gateway in front of them, synchronous and asynchronous inter-service
+communication, EF Core persistence per service, and a full Kubernetes deployment.
 
 **GitHub repository:** https://github.com/PringPriing/MicroservicePracticalProject
 
-This file documents each numbered task from the assignment brief against what's actually
-implemented in this codebase — code locations, how it works, and how to run/verify it yourself.
-Deeper technical detail for two topics lives in dedicated docs and is linked rather than
-duplicated: [`docs/event-driven-architecture.md`](docs/event-driven-architecture.md) (Task 7) and
-[`docs/synchronous-communication.md`](docs/synchronous-communication.md) (Task 6).
+This file walks through the system area by area — code locations, how each piece works, and how
+to run/verify it yourself. Deeper technical detail for two topics lives in dedicated docs and is
+linked rather than duplicated: [`docs/event-driven-architecture.md`](docs/event-driven-architecture.md)
+and [`docs/synchronous-communication.md`](docs/synchronous-communication.md).
 
 ## Architecture at a glance
 
@@ -44,13 +42,13 @@ patterns, validation pipeline, etc.) that both services follow.
 
 ---
 
-## Task 1: Environment Setup
+## Environment Setup
 
 **Required tooling:**
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/), with **Kubernetes enabled**
-  (Settings → Kubernetes → Enable Kubernetes) — this repo's Kubernetes deployment (Task 4) runs
-  against Docker Desktop's built-in local cluster
+  (Settings → Kubernetes → Enable Kubernetes) — the Kubernetes deployment below runs against
+  Docker Desktop's built-in local cluster
 - `kubectl` (bundled with Docker Desktop once Kubernetes is enabled)
 - A reachable SQL Server instance for local (non-container) development — `Trusted_Connection=True`
   against `localhost` by default, or just use the containerized SQL Server from the Kubernetes setup
@@ -73,13 +71,13 @@ test projects) is working.
 
 ---
 
-## Task 2: Developing Domain-Specific Microservices
+## Domain Services
 
 Two independent Minimal API services, each following the same layered pattern
 (`API` → `Application` → `Domain` / `Infrastructure`; see `CLAUDE.md`'s Architecture section for
 the full convention):
 
-### Microservice 1 — UserManagement (`src/UserManagement/`)
+### UserManagement (`src/UserManagement/`)
 Domain: user management and authentication.
 
 | Endpoint | Method | Auth | Description |
@@ -93,7 +91,7 @@ Domain: user management and authentication.
 
 Code: `src/UserManagement/UserManagement.API/Endpoints/UserEndpoints.cs`.
 
-### Microservice 2 — ProductCatalog (`src/ProductCatalog/`)
+### ProductCatalog (`src/ProductCatalog/`)
 Domain: e-commerce product catalog, cart, and inventory.
 
 | Endpoint | Method | Auth | Description |
@@ -123,7 +121,7 @@ dotnet run --project src/ProductCatalog/ProductCatalog.API      # http://localho
 
 ---
 
-## Task 3: Persistence Layer Implementation
+## Persistence Layer
 
 Both services use EF Core with a dedicated `DbContext` and its own SQL Server database — no
 shared database, no cross-service foreign keys.
@@ -147,7 +145,7 @@ Handlers inject the base `DbContext` (never the concrete `<Service>DbContext`) a
 dotnet ef database update --project src/UserManagement/UserManagement.Infrastructure --startup-project src/UserManagement/UserManagement.API
 dotnet ef database update --project src/ProductCatalog/ProductCatalog.Infrastructure --startup-project src/ProductCatalog/ProductCatalog.API
 ```
-(In Kubernetes, both APIs instead run `Database.Migrate()` automatically on startup — see Task 4.)
+(In Kubernetes, both APIs instead run `Database.Migrate()` automatically on startup — see below.)
 
 **Add a new migration** (e.g. after changing an entity):
 ```
@@ -158,23 +156,23 @@ this project follows for migrations.
 
 ---
 
-## Task 4: Kubernetes Deployment
+## Kubernetes Deployment
 
 Both services are containerized (see each service's `Dockerfile`) and deployed to Kubernetes.
 
-> **Note on scope:** the assignment brief mentions provisioning this on Azure (AKS) via an
-> architect/infra team. No Azure credentials were provisioned for this project, so this
-> implementation targets **Docker Desktop's built-in local Kubernetes cluster** instead — the same
-> manifests (`Deployment`/`Service`/`ConfigMap`/`Secret`) would apply to a real AKS cluster with
-> only the image registry and `imagePullPolicy` needing to change (`imagePullPolicy: Never` only
-> works because Docker Desktop's Kubernetes shares its image cache with `docker build`).
+> **Note on scope:** this deployment targets **Docker Desktop's built-in local Kubernetes
+> cluster**, since no cloud Kubernetes credentials were available for this project. The same
+> manifests (`Deployment`/`Service`/`ConfigMap`/`Secret`) would apply to a real managed cluster
+> (e.g. AKS/EKS/GKE) with only the image registry and `imagePullPolicy` needing to change
+> (`imagePullPolicy: Never` only works because Docker Desktop's Kubernetes shares its image cache
+> with `docker build`).
 
 **What's deployed** (`k8s/`):
 - `sql-server/` — a `StatefulSet` with a persistent volume, so data survives pod restarts
-- `rabbitmq/` — the message broker for Task 7's event-driven communication
+- `rabbitmq/` — the message broker for the event-driven communication described below
 - `usermanagement-api/`, `productcatalog-api/` — each with a `Deployment`, `Service`
   (`LoadBalancer`, mapped straight to `localhost` by Docker Desktop), `ConfigMap`, and `Secret`
-- `api-gateway/` — the Task 5 Ocelot gateway's `Deployment` and `Service`
+- `api-gateway/` — the Ocelot gateway's `Deployment` and `Service`
 
 Full step-by-step instructions (build images, apply manifests in dependency order, verify, tear
 down) are in **[`k8s/README.md`](k8s/README.md)** rather than duplicated here. Quick summary:
@@ -195,12 +193,12 @@ kubectl get pods -n microservices   # all 5 should reach Running/1/1
 
 ---
 
-## Task 5: API Gateway Integration
+## API Gateway
 
 An [Ocelot](https://github.com/ThreeMammals/Ocelot) API Gateway (`src/ApiGateway/`) sits in front
 of both services as a third deployable. It's a pure reverse proxy — no gateway-level
 re-authentication; the `Authorization` header passes straight through to whichever downstream
-service validates it (both already do, identically, per Task 6/the shared JWT config).
+service validates it (both already do, identically, per the shared JWT config described below).
 
 **Why `net8.0` when everything else is `net10.0`:** Ocelot's current stable release only supports
 `net8.0`/`net9.0` (`net10.0` support exists only in a beta as of this writing). Since the gateway
@@ -235,17 +233,17 @@ dotnet run --project src/UserManagement/UserManagement.API
 dotnet run --project src/ProductCatalog/ProductCatalog.API
 dotnet run --project src/ApiGateway                          # http://localhost:5000
 ```
-Then repeat any of the Task 2 endpoint calls against `localhost:5000` instead of the services'
+Then repeat any of the endpoint calls above against `localhost:5000` instead of the services'
 own ports (`5262`/`5288`) — identical responses confirm the gateway is routing correctly. In
-Kubernetes, the equivalent front door is `localhost:8080` (see Task 4/`k8s/README.md`), verified
-live end-to-end there: registering a user, logging in, and calling `POST /cart/items` through the
+Kubernetes, the equivalent front door is `localhost:8080` (see `k8s/README.md`), verified live
+end-to-end there: registering a user, logging in, and calling `POST /cart/items` through the
 gateway returns a `200` with the cart's `owner` field populated — proof the gateway correctly
-routes to both services *and* that Task 6's synchronous cross-service call keeps working when
+routes to both services *and* that the synchronous cross-service call below keeps working when
 fronted by the gateway.
 
 ---
 
-## Task 6: Synchronous Communication
+## Synchronous Communication
 
 `POST /cart/items` (ProductCatalog) synchronously calls `GET /auth/{id}` (UserManagement) over
 HTTP to enrich the returned cart with the owner's profile (`CartDto.Owner`). Full design rationale,
@@ -267,7 +265,7 @@ call to confirm it still returns `200` with `owner: null`.
 
 ---
 
-## Task 7: Asynchronous Messaging with Event Bus
+## Asynchronous Messaging with Event Bus
 
 RabbitMQ-based event-driven communication: after a user registers, UserManagement publishes a
 `UserRegisteredEvent`; ProductCatalog consumes it and provisions an empty cart for that user. Full
@@ -290,11 +288,11 @@ worked.
 
 ---
 
-## Task 8: Documentation and Presentation
+## Documentation
 
-This file. Combined with `CLAUDE.md` (architecture conventions and code-style rules for anyone —
+This file, together with `CLAUDE.md` (architecture conventions and code-style rules for anyone —
 human or AI — working in this codebase), `k8s/README.md` (deployment runbook), and the two `docs/`
-files linked above (event-driven and synchronous communication design docs), this is the complete
+files linked above (event-driven and synchronous communication design docs), make up the complete
 documentation set for the project.
 
 ---
@@ -315,11 +313,12 @@ in-memory database instead — no SQL Server or RabbitMQ instance is required to
 
 This is a teaching/practical project, not a production system. Documented honestly rather than
 glossed over:
-- **No Azure deployment** — Task 4/5's Kubernetes manifests target Docker Desktop's local cluster,
-  not a provisioned Azure AKS cluster (no credentials were available); see the note under Task 4.
-- **No DLQ/retry/outbox pattern** for the RabbitMQ integration (Task 7) — see
+- **No cloud deployment** — the Kubernetes manifests target Docker Desktop's local cluster, not a
+  provisioned cloud cluster (no credentials were available); see the note under Kubernetes
+  Deployment above.
+- **No DLQ/retry/outbox pattern** for the RabbitMQ integration — see
   `docs/event-driven-architecture.md`'s "Known simplifications" section.
-- **No retry/circuit-breaker or caching** for the synchronous HTTP call (Task 6), and no self-only
+- **No retry/circuit-breaker or caching** for the synchronous HTTP call, and no self-only
   authorization on `GET /auth/{id}` — see `docs/synchronous-communication.md`'s "Known
   simplifications" section.
 - **No role/admin concept anywhere** — every authenticated endpoint is callable by any
