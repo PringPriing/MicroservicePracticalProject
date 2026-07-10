@@ -23,10 +23,14 @@ a deployment guide. This README only documents what's different about the manife
   `api-gateway/deployment.yaml`: image references point at
   `mspracticalSEA.azurecr.io/<name>:v1` with `imagePullPolicy: IfNotPresent`, instead of
   `<name>:local` / `imagePullPolicy: Never`.
-- `usermanagement-api/secret.yaml`, `productcatalog-api/secret.yaml`: `Jwt__Key` is a real
-  generated 48-byte random value (identical in both files — both services validate the same
-  signing key). `sql-server/secret.yaml`: `MSSQL_SA_PASSWORD` is a real generated strong password
-  (matched in both API secrets' connection strings).
+- `usermanagement-api/secret.yaml`, `productcatalog-api/secret.yaml`, `sql-server/secret.yaml`:
+  ship with the exact same placeholder values `../k8s` uses (`Jwt__Key:
+  "change-this-to-a-secure-secret-key-at-least-32-chars"`, `MSSQL_SA_PASSWORD:
+  "YourStrong!Passw0rd"`) — **generate real values before applying these to any cluster.** The
+  live `aks-msp-teaching` deployment currently running was applied with real generated values
+  (identical `Jwt__Key` across both API secrets, matching SQL password in both connection strings
+  and the SQL Server secret) supplied directly via `kubectl apply`/Run command rather than
+  committed to git — those real values are **not** reflected in these files.
 - Everything else — `namespace.yaml`, both ConfigMaps, all Services, and the RabbitMQ manifests —
   is unchanged from `../k8s`. `RabbitMq__UserName`/`Password` are still `guest`/`guest`: RabbitMQ
   has no external Service exposure (ClusterIP-default, no LoadBalancer), so this is an accepted

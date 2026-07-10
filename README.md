@@ -42,6 +42,77 @@ patterns, validation pipeline, etc.) that both services follow.
 
 ---
 
+## Kubernetes Deployment
+
+Both services are containerized (see each service's `Dockerfile`) and deployed to Kubernetes, in
+two variants: a local one (Docker Desktop) and a cloud one (Azure Kubernetes Service).
+
+**What's deployed**, in both variants — same five workloads, same `microservices` namespace, same
+internal service DNS names:
+- `sql-server/` — a `StatefulSet` with a persistent volume, so data survives pod restarts
+- `rabbitmq/` — the message broker for the event-driven communication described below
+- `usermanagement-api/`, `productcatalog-api/` — each with a `Deployment`, `Service`
+  (`LoadBalancer`), `ConfigMap`, and `Secret`
+- `api-gateway/` — the Ocelot gateway's `Deployment` and `Service`
+
+### Local (Docker Desktop)
+
+Full step-by-step instructions (build images, apply manifests in dependency order, verify, tear
+down) are in **[`k8s/README.md`](k8s/README.md)** rather than duplicated here. Quick summary:
+```
+docker build -t usermanagement-api:local -f src/UserManagement/UserManagement.API/Dockerfile .
+docker build -t productcatalog-api:local -f src/ProductCatalog/ProductCatalog.API/Dockerfile .
+docker build -t api-gateway:local -f src/ApiGateway/Dockerfile .
+
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/sql-server/
+kubectl apply -f k8s/rabbitmq/
+kubectl apply -f k8s/usermanagement-api/
+kubectl apply -f k8s/productcatalog-api/
+kubectl apply -f k8s/api-gateway/
+
+kubectl get pods -n microservices   # all 5 should reach Running/1/1
+```
+`imagePullPolicy: Never` only works here because Docker Desktop's Kubernetes shares its image
+cache with `docker build` — no registry involved.
+
+### Cloud (Azure Kubernetes Service)
+
+The same stack is also deployed to a real AKS cluster (`aks-msp-teaching`), with images built and
+pushed to Azure Container Registry (`mspracticalSEA`) instead of the local Docker cache. Manifest
+deltas from the local variant (image references, generated JWT/SQL secrets, a reduced SQL Server
+memory footprint to fit the cluster's node pool, and an `fsGroup` fix for SQL Server's non-root
+container on Azure Disk-backed volumes) are documented in full in
+**[`k8s/azure/README.md`](k8s/azure/README.md)**.
+
+**Live external IPs** for this deployment (`kubectl get svc -n microservices` if these ever
+change):
+
+| Service | External URL |
+|---|---|
+| API Gateway | `http://20.205.248.29:8080` |
+| UserManagement API (direct) | `http://20.6.122.22:8081` |
+| ProductCatalog API (direct) | `http://4.144.199.182:8082` |
+
+**Verified end-to-end** through the gateway — register, log in, create a category and product,
+then add to cart:
+```
+curl -i -X POST http://20.205.248.29:8080/auth/register -H "Content-Type: application/json" -d "{\"userName\":\"aksuser\",\"email\":\"aksuser@example.com\",\"password\":\"Secret123!\",\"firstName\":\"AKS\",\"lastName\":\"User\",\"phoneNumber\":\"555-0100\",\"dateOfBirth\":\"1990-01-01\"}"
+
+curl -i -X POST http://20.205.248.29:8080/auth/login -H "Content-Type: application/json" -d "{\"userName\":\"aksuser\",\"password\":\"Secret123!\"}"
+
+# take the "token" from the login response as <token> below
+curl -i -X POST http://20.205.248.29:8080/categories -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"name\":\"Test\",\"parentId\":null}"
+curl -i -X POST http://20.205.248.29:8080/products -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"name\":\"Widget\",\"description\":\"desc\",\"price\":9.99,\"currency\":\"USD\",\"categoryId\":\"<category id>\",\"imageUrls\":[],\"attributes\":{},\"inventoryCount\":10}"
+curl -i -X POST http://20.205.248.29:8080/cart/items -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"productId\":\"<product id>\",\"quantity\":1}"
+```
+The cart response's `owner` field being populated confirms both the gateway's routing and the
+ProductCatalog → UserManagement synchronous call work end-to-end in AKS. Full payload reference,
+plus the public `GET /products` call and hitting each API directly (bypassing the gateway), is in
+`k8s/azure/README.md`'s Testing section.
+
+---
+
 ## Environment Setup
 
 **Required tooling:**
@@ -153,77 +224,6 @@ dotnet ef migrations add <Name> --project src/<Service>/<Service>.Infrastructure
 ```
 See [`.claude/rules/migrations.md`](.claude/rules/migrations.md) for the idempotency/rollback rules
 this project follows for migrations.
-
----
-
-## Kubernetes Deployment
-
-Both services are containerized (see each service's `Dockerfile`) and deployed to Kubernetes, in
-two variants: a local one (Docker Desktop) and a cloud one (Azure Kubernetes Service).
-
-**What's deployed**, in both variants — same five workloads, same `microservices` namespace, same
-internal service DNS names:
-- `sql-server/` — a `StatefulSet` with a persistent volume, so data survives pod restarts
-- `rabbitmq/` — the message broker for the event-driven communication described below
-- `usermanagement-api/`, `productcatalog-api/` — each with a `Deployment`, `Service`
-  (`LoadBalancer`), `ConfigMap`, and `Secret`
-- `api-gateway/` — the Ocelot gateway's `Deployment` and `Service`
-
-### Local (Docker Desktop)
-
-Full step-by-step instructions (build images, apply manifests in dependency order, verify, tear
-down) are in **[`k8s/README.md`](k8s/README.md)** rather than duplicated here. Quick summary:
-```
-docker build -t usermanagement-api:local -f src/UserManagement/UserManagement.API/Dockerfile .
-docker build -t productcatalog-api:local -f src/ProductCatalog/ProductCatalog.API/Dockerfile .
-docker build -t api-gateway:local -f src/ApiGateway/Dockerfile .
-
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/sql-server/
-kubectl apply -f k8s/rabbitmq/
-kubectl apply -f k8s/usermanagement-api/
-kubectl apply -f k8s/productcatalog-api/
-kubectl apply -f k8s/api-gateway/
-
-kubectl get pods -n microservices   # all 5 should reach Running/1/1
-```
-`imagePullPolicy: Never` only works here because Docker Desktop's Kubernetes shares its image
-cache with `docker build` — no registry involved.
-
-### Cloud (Azure Kubernetes Service)
-
-The same stack is also deployed to a real AKS cluster (`aks-msp-teaching`), with images built and
-pushed to Azure Container Registry (`mspracticalSEA`) instead of the local Docker cache. Manifest
-deltas from the local variant (image references, generated JWT/SQL secrets, a reduced SQL Server
-memory footprint to fit the cluster's node pool, and an `fsGroup` fix for SQL Server's non-root
-container on Azure Disk-backed volumes) are documented in full in
-**[`k8s/azure/README.md`](k8s/azure/README.md)**.
-
-**Live external IPs** for this deployment (`kubectl get svc -n microservices` if these ever
-change):
-
-| Service | External URL |
-|---|---|
-| API Gateway | `http://20.205.248.29:8080` |
-| UserManagement API (direct) | `http://20.6.122.22:8081` |
-| ProductCatalog API (direct) | `http://4.144.199.182:8082` |
-
-**Verified end-to-end** through the gateway — register, log in, create a category and product,
-then add to cart:
-```
-curl -i -X POST http://20.205.248.29:8080/auth/register -H "Content-Type: application/json" -d "{\"userName\":\"aksuser\",\"email\":\"aksuser@example.com\",\"password\":\"Secret123!\",\"firstName\":\"AKS\",\"lastName\":\"User\",\"phoneNumber\":\"555-0100\",\"dateOfBirth\":\"1990-01-01\"}"
-
-curl -i -X POST http://20.205.248.29:8080/auth/login -H "Content-Type: application/json" -d "{\"userName\":\"aksuser\",\"password\":\"Secret123!\"}"
-
-# take the "token" from the login response as <token> below
-curl -i -X POST http://20.205.248.29:8080/categories -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"name\":\"Test\",\"parentId\":null}"
-curl -i -X POST http://20.205.248.29:8080/products -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"name\":\"Widget\",\"description\":\"desc\",\"price\":9.99,\"currency\":\"USD\",\"categoryId\":\"<category id>\",\"imageUrls\":[],\"attributes\":{},\"inventoryCount\":10}"
-curl -i -X POST http://20.205.248.29:8080/cart/items -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"productId\":\"<product id>\",\"quantity\":1}"
-```
-The cart response's `owner` field being populated confirms both the gateway's routing and the
-ProductCatalog → UserManagement synchronous call work end-to-end in AKS. Full payload reference,
-plus the public `GET /products` call and hitting each API directly (bypassing the gateway), is in
-`k8s/azure/README.md`'s Testing section.
 
 ---
 
@@ -349,10 +349,11 @@ in-memory database instead — no SQL Server or RabbitMQ instance is required to
 This is a teaching/practical project, not a production system. Documented honestly rather than
 glossed over:
 - **AKS deployment is a teaching deployment, not a production one** — SQL Server and RabbitMQ run
-  in-cluster (no managed Azure SQL/Service Bus), SQL Server's memory limit is set below Microsoft's
-  recommended minimum to fit the cluster's node pool, and the JWT signing key / SQL SA password
-  are plaintext in `k8s/azure/*/secret.yaml`; see `k8s/azure/README.md` for the full list of
-  deltas from the local deployment and why each was necessary.
+  in-cluster (no managed Azure SQL/Service Bus), and SQL Server's memory limit is set below
+  Microsoft's recommended minimum to fit the cluster's node pool. `k8s/azure/*/secret.yaml` ships
+  with the same placeholder values as `../k8s` (not real secrets); the live cluster runs on real
+  generated values applied directly, not committed to git. See `k8s/azure/README.md` for the full
+  list of deltas from the local deployment and why each was necessary.
 - **No DLQ/retry/outbox pattern** for the RabbitMQ integration — see
   `docs/event-driven-architecture.md`'s "Known simplifications" section.
 - **No retry/circuit-breaker or caching** for the synchronous HTTP call, and no self-only
