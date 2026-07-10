@@ -158,21 +158,18 @@ this project follows for migrations.
 
 ## Kubernetes Deployment
 
-Both services are containerized (see each service's `Dockerfile`) and deployed to Kubernetes.
+Both services are containerized (see each service's `Dockerfile`) and deployed to Kubernetes, in
+two variants: a local one (Docker Desktop) and a cloud one (Azure Kubernetes Service).
 
-> **Note on scope:** this deployment targets **Docker Desktop's built-in local Kubernetes
-> cluster**, since no cloud Kubernetes credentials were available for this project. The same
-> manifests (`Deployment`/`Service`/`ConfigMap`/`Secret`) would apply to a real managed cluster
-> (e.g. AKS/EKS/GKE) with only the image registry and `imagePullPolicy` needing to change
-> (`imagePullPolicy: Never` only works because Docker Desktop's Kubernetes shares its image cache
-> with `docker build`).
-
-**What's deployed** (`k8s/`):
+**What's deployed**, in both variants — same five workloads, same `microservices` namespace, same
+internal service DNS names:
 - `sql-server/` — a `StatefulSet` with a persistent volume, so data survives pod restarts
 - `rabbitmq/` — the message broker for the event-driven communication described below
 - `usermanagement-api/`, `productcatalog-api/` — each with a `Deployment`, `Service`
-  (`LoadBalancer`, mapped straight to `localhost` by Docker Desktop), `ConfigMap`, and `Secret`
+  (`LoadBalancer`), `ConfigMap`, and `Secret`
 - `api-gateway/` — the Ocelot gateway's `Deployment` and `Service`
+
+### Local (Docker Desktop)
 
 Full step-by-step instructions (build images, apply manifests in dependency order, verify, tear
 down) are in **[`k8s/README.md`](k8s/README.md)** rather than duplicated here. Quick summary:
@@ -190,6 +187,43 @@ kubectl apply -f k8s/api-gateway/
 
 kubectl get pods -n microservices   # all 5 should reach Running/1/1
 ```
+`imagePullPolicy: Never` only works here because Docker Desktop's Kubernetes shares its image
+cache with `docker build` — no registry involved.
+
+### Cloud (Azure Kubernetes Service)
+
+The same stack is also deployed to a real AKS cluster (`aks-msp-teaching`), with images built and
+pushed to Azure Container Registry (`mspracticalSEA`) instead of the local Docker cache. Manifest
+deltas from the local variant (image references, generated JWT/SQL secrets, a reduced SQL Server
+memory footprint to fit the cluster's node pool, and an `fsGroup` fix for SQL Server's non-root
+container on Azure Disk-backed volumes) are documented in full in
+**[`k8s/azure/README.md`](k8s/azure/README.md)**.
+
+**Live external IPs** for this deployment (`kubectl get svc -n microservices` if these ever
+change):
+
+| Service | External URL |
+|---|---|
+| API Gateway | `http://20.205.248.29:8080` |
+| UserManagement API (direct) | `http://20.6.122.22:8081` |
+| ProductCatalog API (direct) | `http://4.144.199.182:8082` |
+
+**Verified end-to-end** through the gateway — register, log in, create a category and product,
+then add to cart:
+```
+curl -i -X POST http://20.205.248.29:8080/auth/register -H "Content-Type: application/json" -d "{\"userName\":\"aksuser\",\"email\":\"aksuser@example.com\",\"password\":\"Secret123!\",\"firstName\":\"AKS\",\"lastName\":\"User\",\"phoneNumber\":\"555-0100\",\"dateOfBirth\":\"1990-01-01\"}"
+
+curl -i -X POST http://20.205.248.29:8080/auth/login -H "Content-Type: application/json" -d "{\"userName\":\"aksuser\",\"password\":\"Secret123!\"}"
+
+# take the "token" from the login response as <token> below
+curl -i -X POST http://20.205.248.29:8080/categories -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"name\":\"Test\",\"parentId\":null}"
+curl -i -X POST http://20.205.248.29:8080/products -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"name\":\"Widget\",\"description\":\"desc\",\"price\":9.99,\"currency\":\"USD\",\"categoryId\":\"<category id>\",\"imageUrls\":[],\"attributes\":{},\"inventoryCount\":10}"
+curl -i -X POST http://20.205.248.29:8080/cart/items -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"productId\":\"<product id>\",\"quantity\":1}"
+```
+The cart response's `owner` field being populated confirms both the gateway's routing and the
+ProductCatalog → UserManagement synchronous call work end-to-end in AKS. Full payload reference,
+plus the public `GET /products` call and hitting each API directly (bypassing the gateway), is in
+`k8s/azure/README.md`'s Testing section.
 
 ---
 
@@ -291,9 +325,10 @@ worked.
 ## Documentation
 
 This file, together with `CLAUDE.md` (architecture conventions and code-style rules for anyone —
-human or AI — working in this codebase), `k8s/README.md` (deployment runbook), and the two `docs/`
-files linked above (event-driven and synchronous communication design docs), make up the complete
-documentation set for the project.
+human or AI — working in this codebase), `k8s/README.md` (local deployment runbook),
+`k8s/azure/README.md` (AKS deployment runbook), and the two `docs/` files linked above
+(event-driven and synchronous communication design docs), make up the complete documentation set
+for the project.
 
 ---
 
@@ -313,9 +348,11 @@ in-memory database instead — no SQL Server or RabbitMQ instance is required to
 
 This is a teaching/practical project, not a production system. Documented honestly rather than
 glossed over:
-- **No cloud deployment** — the Kubernetes manifests target Docker Desktop's local cluster, not a
-  provisioned cloud cluster (no credentials were available); see the note under Kubernetes
-  Deployment above.
+- **AKS deployment is a teaching deployment, not a production one** — SQL Server and RabbitMQ run
+  in-cluster (no managed Azure SQL/Service Bus), SQL Server's memory limit is set below Microsoft's
+  recommended minimum to fit the cluster's node pool, and the JWT signing key / SQL SA password
+  are plaintext in `k8s/azure/*/secret.yaml`; see `k8s/azure/README.md` for the full list of
+  deltas from the local deployment and why each was necessary.
 - **No DLQ/retry/outbox pattern** for the RabbitMQ integration — see
   `docs/event-driven-architecture.md`'s "Known simplifications" section.
 - **No retry/circuit-breaker or caching** for the synchronous HTTP call, and no self-only
