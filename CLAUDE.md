@@ -69,6 +69,8 @@ Request flow: **Minimal API endpoint → MediatR command/query → handler → `
 
 **YOU MUST** keep business logic in `Application` (handlers) or `Domain` (entity methods) — never in the `API` layer, and never call one service's `DbContext` from the other service.
 
+**IMPORTANT:** When generating new code, follow the existing structure and conventions of the surrounding feature/service exactly — same folder layout (`Commands`/`Queries`/`<Name>` one-file-per-feature), same file naming, same patterns for handlers, validators, and DTOs described in Architecture and Code Style above. Do not introduce a new pattern, abstraction, or file layout for something an existing feature already demonstrates — mirror the closest existing example instead of inventing a new approach.
+
 ## Environment
 
 - Requires the .NET 10 SDK and a reachable SQL Server instance (`Trusted_Connection=True` against `localhost` by default; `UserManagementDb` and `ProductCatalogDb` respectively).
