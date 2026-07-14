@@ -13,6 +13,13 @@ public static class ProductEndpoints
     {
         var group = app.MapGroup("/products");
 
+        group.MapGet("/dummy", () => Results.Ok(new List<ProductDto>
+        {
+            new(Guid.NewGuid(), "Dummy Product 1", "Sample product for deployment verification", 9.99m, "USD", Guid.NewGuid(), [], new Dictionary<string, string>(), 100, DateTime.UtcNow),
+            new(Guid.NewGuid(), "Dummy Product 2", "Sample product for deployment verification", 19.99m, "USD", Guid.NewGuid(), [], new Dictionary<string, string>(), 50, DateTime.UtcNow),
+        }))
+        .WithName("GetDummyProducts");
+
         group.MapGet("/{productId}", async (string productId, HttpContext http, IMediator mediator, CancellationToken ct) =>
         {
             if (!Guid.TryParse(productId, out Guid id))
